@@ -173,3 +173,11 @@ def firsat_reyonunu_getir():
     firsatlar = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return firsatlar
+    
+@app.get("/manifest.json")
+def get_manifest():
+    return FileResponse("manifest.json")
+
+@app.get("/sw.js")
+def get_sw():
+    return FileResponse("sw.js")
