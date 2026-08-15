@@ -181,3 +181,4 @@ def get_manifest():
 @app.get("/sw.js")
 def get_sw():
     return FileResponse("sw.js")
+
