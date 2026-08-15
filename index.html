@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZayiApp - MerkezSoft</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Excel Kütüphanesi -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- YENİ EKLENEN: Kamera ile Barkod Okuma Kütüphanesi -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-dark mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">📦 MerkezSoft ZayiApp Yönetim Paneli</span>
+        </div>
+    </nav>
+
+    <div class="container">
+        
+        <!-- DASHBOARD (ÖZET EKRANI) -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card bg-primary text-white shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-uppercase text-white-50">Toplam Aktif Ürün</h6>
+                        <h2 class="display-5 fw-bold mb-0" id="statToplamUrun">0</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-warning text-dark shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-uppercase text-muted">Kritik SKT Alarmı</h6>
+                        <h2 class="display-5 fw-bold mb-0" id="statRiskliUrun">0</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-uppercase text-white-50">Fırsat Reyonu (Kurtarılan)</h6>
+                        <h2 class="display-5 fw-bold mb-0" id="statFirsatUrun">0</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Sol Taraf: Formlar ve Zayi Arşivi -->
+            <div class="col-md-4">
+                <!-- Ürün Ekleme -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-dark text-white">➕ Yeni Ürün Ekle</div>
+                    <div class="card-body">
+                        <!-- YENİ EKLENEN: Kamera Ekranının Çıkacağı Kutu (Gizli başlar) -->
+                        <div id="kameraKutusu" style="display: none; margin-bottom: 15px; border-radius: 8px; overflow: hidden; border: 2px solid #0d6efd;"></div>
+                        
+                        <form id="urunForm">
+                            <!-- YENİ EKLENEN: Barkod Kutusu ve Kamera Butonu Yan Yana -->
+                            <div class="mb-2 input-group">
+                                <input type="text" id="barkod" class="form-control" placeholder="Barkod" required>
+                                <button class="btn btn-outline-primary fw-bold" type="button" onclick="kamerayiAc()">📷 Tara</button>
+                            </div>
+                            
+                            <div class="mb-2"><input type="text" id="marka" class="form-control" placeholder="Marka (Örn: Sütaş)" required></div>
+                            <div class="mb-2"><input type="text" id="isim" class="form-control" placeholder="Ürün İsmi" required></div>
+                            <div class="mb-2"><input type="number" id="stok" class="form-control" placeholder="Stok Adedi" required></div>
+                            <div class="mb-2"><label class="form-label text-muted small mb-0">Son Kullanma Tarihi</label><input type="date" id="skt" class="form-control" required></div>
+                            <div class="mb-2"><input type="text" id="kategori" class="form-control" placeholder="Kategori" required></div>
+                            <div class="mb-3"><input type="text" id="sube" class="form-control" placeholder="Şube" required></div>
+                            <button type="submit" class="btn btn-primary w-100">Sisteme Ekle</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                        <span>🗑️ Zayi Arşivi</span>
+                        <button class="btn btn-sm btn-light text-danger fw-bold" onclick="excelIndir('tabloZayi', 'MerkezSoft_Zayi_Raporu')">📊 Excel</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 300px;">
+                            <table class="table table-sm table-striped mb-0" id="tabloZayi">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Marka & Ürün</th>
+                                        <th>Miktar</th>
+                                        <th>Sebep</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="zayiTablosu"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                
+                <div class="card shadow-sm mb-4 border-warning">
+                    <div class="card-body d-flex align-items-center justify-content-between bg-warning bg-opacity-10">
+                        <div>
+                            <h5 class="mb-0 text-warning fw-bold">⚠️ Manuel SKT Sorgula</h5>
+                        </div>
+                        <div class="d-flex">
+                            <input type="date" id="sktSorguTarih" class="form-control form-control-sm me-2">
+                            <button class="btn btn-warning btn-sm fw-bold" onclick="sktSorgula()">Bul</button>
+                            <button class="btn btn-secondary btn-sm ms-2" onclick="urunleriGetir()">Tümünü Gör</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <span>🛒 Aktif Raf / Depo Durumu</span>
+                        <button class="btn btn-sm btn-light text-primary fw-bold" onclick="excelIndir('tabloUrunler', 'MerkezSoft_Aktif_Stok_Raporu')">📊 Excel</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 350px;">
+                            <table class="table table-striped table-hover align-middle mb-0" id="tabloUrunler">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Barkod</th>
+                                        <th>Marka</th>
+                                        <th>İsim</th>
+                                        <th>Stok</th>
+                                        <th>SKT Durumu</th>
+                                        <th class="text-end">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="urunTablosu"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-success">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <span>📉 Fırsat Reyonu (İndirimli Ürünler)</span>
+                        <button class="btn btn-sm btn-light text-success fw-bold" onclick="excelIndir('tabloFirsat', 'MerkezSoft_Firsat_Reyonu_Raporu')">📊 Excel</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 250px;">
+                            <table class="table table-sm table-hover align-middle mb-0" id="tabloFirsat">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Barkod</th>
+                                        <th>Marka</th>
+                                        <th>Ürün İsmi</th>
+                                        <th>Kalan Stok</th>
+                                        <th>Yeni Fiyat</th>
+                                        <th>Kayıt</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="firsatTablosu"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- API İLE İLETİŞİM -->
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+
+        // --- YENİ EKLENEN: KAMERA VE BARKOD OKUMA SİSTEMİ ---
+        let html5QrCode;
+
+        function kamerayiAc() {
+            const kameraKutusu = document.getElementById("kameraKutusu");
+            kameraKutusu.style.display = "block"; // Kamerayı görünür yap
+
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("kameraKutusu");
+            }
+
+            html5QrCode.start(
+                { facingMode: "environment" }, // Arka kamerayı kullanmaya çalışır
+                {
+                    fps: 10,    // Saniyede 10 kare tara
+                    qrbox: { width: 250, height: 100 } // Dikdörtgen barkod okuma alanı
+                },
+                (decodedText, decodedResult) => {
+                    // Barkod başarıyla okunduğunda burası çalışır
+                    document.getElementById("barkod").value = decodedText; // Kutuyu doldur
+                    
+                    // Küçük bir "Bip" sesi çıkar (Başarı hissi verir)
+                    let audio = new Audio('https://www.soundjay.com/buttons/sounds/button-09.mp3');
+                    audio.play().catch(e => console.log("Ses çalınamadı", e));
+
+                    // Kamerayı kapat
+                    html5QrCode.stop().then(() => {
+                        kameraKutusu.style.display = "none";
+                    }).catch(err => console.log("Kamera durdurulamadı", err));
+                },
+                (errorMessage) => {
+                    // Okuma sırasında sürekli tarıyor, hataları yoksayıyoruz
+                }
+            ).catch((err) => {
+                alert("Kameraya erişilemedi! Lütfen tarayıcınızın kamera izni verdiğinden emin olun.");
+                kameraKutusu.style.display = "none";
+            });
+        }
+        // -----------------------------------------------------
+
+        function excelIndir(tabloID, dosyaAdi) {
+            let tablo = document.getElementById(tabloID);
+            let wb = XLSX.utils.table_to_book(tablo, {sheet: "Rapor"});
+            XLSX.writeFile(wb, dosyaAdi + ".xlsx");
+        }
+
+        async function urunleriGetir() {
+            const response = await fetch(`${API_URL}/urunler/`);
+            const urunler = await response.json();
+            const tablo = document.getElementById("urunTablosu");
+            tablo.innerHTML = ""; 
+            let riskliSayisi = 0; 
+            const bugun = new Date(); 
+
+            urunler.forEach(urun => {
+                const urunSktObj = new Date(urun.skt);
+                const farkZaman = urunSktObj.getTime() - bugun.getTime();
+                const farkGun = Math.ceil(farkZaman / (1000 * 3600 * 24));
+                if (farkGun >= 0 && farkGun <= 7) riskliSayisi++;
+
+                let sktEtiketi = "";
+                if (farkGun === 0) sktEtiketi = '<span class="badge bg-danger">BUGÜN!</span>';
+                else if (farkGun > 0 && farkGun <= 7) sktEtiketi = `<span class="badge bg-warning text-dark">Son ${farkGun} Gün</span>`;
+
+                tablo.innerHTML += `
+                    <tr>
+                        <td><strong>${urun.barkod}</strong></td>
+                        <td><span class="text-primary fw-bold">${urun.marka}</span></td>
+                        <td>${urun.isim}</td>
+                        <td><span class="badge bg-primary fs-6">${urun.stok_adedi}</span></td>
+                        <td><div><small class="text-muted">${urun.skt}</small></div>${sktEtiketi}</td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-secondary btn-sm mb-1" onclick="stokGuncelle('${urun.barkod}', '${urun.marka} ${urun.isim}', ${urun.stok_adedi})" title="Stok Güncelle">🔄</button>
+                            <button class="btn btn-success btn-sm mb-1" onclick="firsataAl('${urun.barkod}', '${urun.marka} ${urun.isim}')">📉</button>
+                            <button class="btn btn-danger btn-sm mb-1" onclick="zayiBildir('${urun.barkod}', '${urun.marka} ${urun.isim}')">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            document.getElementById("statToplamUrun").innerText = urunler.length;
+            document.getElementById("statRiskliUrun").innerText = riskliSayisi;
+        }
+
+        async function zayiGecmisiGetir() {
+            const response = await fetch(`${API_URL}/zayi-gecmisi/`);
+            const gecmis = await response.json();
+            const tablo = document.getElementById("zayiTablosu");
+            tablo.innerHTML = ""; 
+            gecmis.forEach(kayit => {
+                tablo.innerHTML += `
+                    <tr>
+                        <td><small><strong class="text-primary">${kayit.marka}</strong> ${kayit.isim}<br><span class="text-muted">${kayit.barkod}</span></small></td>
+                        <td>${kayit.zayi_miktari}</td>
+                        <td><span class="badge bg-danger">${kayit.sebep}</span></td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function firsatReyonunuGetir() {
+            const response = await fetch(`${API_URL}/firsat-reyonu/`);
+            const firsatlar = await response.json();
+            const tablo = document.getElementById("firsatTablosu");
+            tablo.innerHTML = ""; 
+            firsatlar.forEach(urun => {
+                tablo.innerHTML += `
+                    <tr>
+                        <td><strong>${urun.barkod}</strong></td>
+                        <td><span class="text-primary fw-bold">${urun.marka}</span></td>
+                        <td>${urun.isim}</td>
+                        <td><span class="badge bg-success">${urun.stok_adedi}</span></td>
+                        <td><strong class="text-success fs-5">${urun.indirimli_fiyat} ₺</strong></td>
+                        <td><small class="text-muted">${urun.indirime_girdigi_tarih.split(" ")[0]}</small></td>
+                    </tr>
+                `;
+            });
+            document.getElementById("statFirsatUrun").innerText = firsatlar.length;
+        }
+
+        async function firsataAl(barkod, tamIsim) {
+            const yeniFiyat = prompt(`DİKKAT: ${tamIsim} (Barkod: ${barkod}) ürünü Fırsat Reyonuna taşınacak.\nLütfen indirimli yeni satış fiyatını girin:`);
+            if (yeniFiyat !== null && yeniFiyat !== "") {
+                const response = await fetch(`${API_URL}/firsat-reyonuna-al/${barkod}?yeni_fiyat=${yeniFiyat}`, { method: "POST" });
+                if (response.ok) { urunleriGetir(); firsatReyonunuGetir(); }
+            }
+        }
+
+        async function stokGuncelle(barkod, tamIsim, mevcutStok) {
+            const yeniStok = prompt(`${tamIsim} için yeni stok miktarını girin:\n(Mevcut Stok: ${mevcutStok})`, mevcutStok);
+            if (yeniStok !== null && yeniStok !== "") {
+                const response = await fetch(`${API_URL}/stok-guncelle/${barkod}?yeni_stok=${yeniStok}`, { method: "PUT" });
+                if (response.ok) urunleriGetir(); 
+            }
+        }
+
+        document.getElementById("urunForm").addEventListener("submit", async function(event) {
+            event.preventDefault(); 
+            const yeniUrun = {
+                barkod: document.getElementById("barkod").value,
+                marka: document.getElementById("marka").value,
+                isim: document.getElementById("isim").value,
+                stok_adedi: parseInt(document.getElementById("stok").value),
+                skt: document.getElementById("skt").value,
+                kategori: document.getElementById("kategori").value,
+                sube: document.getElementById("sube").value
+            };
+            const response = await fetch(`${API_URL}/urun-ekle/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(yeniUrun)
+            });
+            if (response.ok) { document.getElementById("urunForm").reset(); urunleriGetir(); }
+        });
+
+        async function zayiBildir(barkod, tamIsim) {
+            const sebep = prompt(`DİKKAT: ${tamIsim} ürünü raftan kaldırılıp çöpe atılacak.\nLütfen zayi sebebini girin:`);
+            if (sebep) {
+                const response = await fetch(`${API_URL}/urun-zayi-bildir/${barkod}?sebep=${sebep}`, { method: "DELETE" });
+                if (response.ok) { urunleriGetir(); zayiGecmisiGetir(); }
+            }
+        }
+
+        async function sktSorgula() {
+            const sorguTarihi = document.getElementById("sktSorguTarih").value;
+            if (!sorguTarihi) { alert("Lütfen bir tarih seçin!"); return; }
+            const response = await fetch(`${API_URL}/urunler/`);
+            const tumUrunler = await response.json();
+            const tablo = document.getElementById("urunTablosu");
+            tablo.innerHTML = ""; 
+            const secilenTarihObj = new Date(sorguTarihi);
+            let riskliUrunBulundu = false;
+
+            tumUrunler.forEach(urun => {
+                const urunSktObj = new Date(urun.skt);
+                const farkZaman = urunSktObj.getTime() - secilenTarihObj.getTime();
+                const farkGun = Math.ceil(farkZaman / (1000 * 3600 * 24));
+
+                if (farkGun >= 0 && farkGun <= 7) {
+                    riskliUrunBulundu = true;
+                    let sktEtiketi = "";
+                    let satirRengi = "table-warning";
+                    if (farkGun === 0) { sktEtiketi = '<span class="badge bg-danger fs-6">BUGÜN DOLUYOR!</span>'; satirRengi = "table-danger"; } 
+                    else { sktEtiketi = `<span class="badge bg-warning text-dark">Son ${farkGun} Gün</span>`; }
+
+                    tablo.innerHTML += `
+                        <tr class="${satirRengi}">
+                            <td><strong>${urun.barkod}</strong></td>
+                            <td><span class="text-primary fw-bold">${urun.marka}</span></td>
+                            <td>${urun.isim}</td>
+                            <td><span class="badge bg-primary fs-6">${urun.stok_adedi}</span></td>
+                            <td><div><small class="text-muted">${urun.skt}</small></div>${sktEtiketi}</td>
+                            <td class="text-end">
+                                <button class="btn btn-outline-secondary btn-sm mb-1" onclick="stokGuncelle('${urun.barkod}', '${urun.marka} ${urun.isim}', ${urun.stok_adedi})">🔄</button>
+                                <button class="btn btn-success btn-sm mb-1" onclick="firsataAl('${urun.barkod}', '${urun.marka} ${urun.isim}')">📉</button>
+                                <button class="btn btn-danger btn-sm mb-1" onclick="zayiBildir('${urun.barkod}', '${urun.marka} ${urun.isim}')">🗑️</button>
+                            </td>
+                        </tr>
+                    `;
+                }
+            });
+            if (!riskliUrunBulundu) { tablo.innerHTML = `<tr><td colspan="6" class="text-center text-success fw-bold py-4">Riskli ürün yok.</td></tr>`; }
+        }
+
+        window.onload = function() {
+            urunleriGetir();
+            zayiGecmisiGetir();
+            firsatReyonunuGetir();
+        };
+    </script>
+</body>
+</html>
