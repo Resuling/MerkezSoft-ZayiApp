@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from datetime import datetime
 import sqlite3
+import hashlib
 
 app = FastAPI()
 
@@ -14,53 +15,61 @@ def get_db():
 def veritabani_kurulumu():
     conn = get_db()
     cursor = conn.cursor()
+    # YENİ: Kullanıcılar Tablosu
+    cursor.execute('''CREATE TABLE IF NOT EXISTS kullanicilar (kullanici_adi TEXT PRIMARY KEY, sifre TEXT, firma_kodu TEXT)''')
     
-    # YENİ EKLENEN: marka sütunu eklendi
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS urunler (
-            barkod TEXT PRIMARY KEY,
-            marka TEXT,
-            isim TEXT,
-            stok_adedi INTEGER,
-            skt TEXT,
-            kategori TEXT,
-            sube TEXT
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS zayi_gecmisi (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tarih TEXT,
-            barkod TEXT,
-            marka TEXT,
-            isim TEXT,
-            zayi_miktari INTEGER,
-            sebep TEXT
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS firsat_reyonu (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            barkod TEXT,
-            marka TEXT,
-            isim TEXT,
-            kategori TEXT,
-            stok_adedi INTEGER,
-            indirimli_fiyat REAL,
-            indirime_girdigi_tarih TEXT
-        )
-    ''')
-    
+    cursor.execute('''CREATE TABLE IF NOT EXISTS urunler (barkod TEXT, firma_kodu TEXT, marka TEXT, isim TEXT, stok_adedi INTEGER, skt TEXT, kategori TEXT, sube TEXT, PRIMARY KEY(barkod, firma_kodu))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS zayi_gecmisi (id INTEGER PRIMARY KEY AUTOINCREMENT, firma_kodu TEXT, tarih TEXT, barkod TEXT, marka TEXT, isim TEXT, zayi_miktari INTEGER, sebep TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS firsat_reyonu (id INTEGER PRIMARY KEY AUTOINCREMENT, firma_kodu TEXT, barkod TEXT, marka TEXT, isim TEXT, kategori TEXT, stok_adedi INTEGER, indirimli_fiyat REAL, indirime_girdigi_tarih TEXT)''')
     conn.commit()
     conn.close()
 
 veritabani_kurulumu()
 
-# YENİ EKLENEN: marka alanı eklendi
+# YENİ: Şifre Kriptolama Fonksiyonu (Güvenlik için)
+def sifre_hashle(sifre: str):
+    return hashlib.sha256(sifre.encode()).hexdigest()
+
+# YENİ: Kullanıcı Pydantic Modeli
+class Kullanici(BaseModel):
+    kullanici_adi: str
+    sifre: str
+    firma_kodu: str = None
+
+# ----------------- KULLANICI GİRİŞ/KAYIT API'LERİ -----------------
+@app.post("/kayit/")
+def kullanici_kayit(kul: Kullanici):
+    if not kul.firma_kodu:
+        raise HTTPException(status_code=400, detail="Firma kodu zorunludur!")
+    conn = get_db()
+    cursor = conn.cursor()
+    hashli_sifre = sifre_hashle(kul.sifre)
+    try:
+        cursor.execute('INSERT INTO kullanicilar (kullanici_adi, sifre, firma_kodu) VALUES (?, ?, ?)', (kul.kullanici_adi, hashli_sifre, kul.firma_kodu))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış!")
+    conn.close()
+    return {"mesaj": "Kayıt başarılı"}
+
+@app.post("/giris/")
+def kullanici_giris(kul: Kullanici):
+    conn = get_db()
+    cursor = conn.cursor()
+    hashli_sifre = sifre_hashle(kul.sifre)
+    cursor.execute('SELECT firma_kodu FROM kullanicilar WHERE kullanici_adi = ? AND sifre = ?', (kul.kullanici_adi, hashli_sifre))
+    kullanici = cursor.fetchone()
+    conn.close()
+    if kullanici:
+        return {"mesaj": "Giriş başarılı", "firma_kodu": kullanici["firma_kodu"], "kullanici_adi": kul.kullanici_adi}
+    else:
+        raise HTTPException(status_code=401, detail="Hatalı kullanıcı adı veya şifre!")
+
+# ----------------- ÜRÜN VE ZAYİ API'LERİ -----------------
 class Urun(BaseModel):
     barkod: str
+    firma_kodu: str 
     marka: str
     isim: str
     stok_adedi: int
@@ -69,14 +78,13 @@ class Urun(BaseModel):
     sube: str
 
 @app.get("/")
-def ana_sayfa():
-    return FileResponse("index.html")
+def ana_sayfa(): return FileResponse("index.html")
 
-@app.get("/urunler/")
-def urunleri_getir():
+@app.get("/urunler/{firma_kodu}")
+def urunleri_getir(firma_kodu: str):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM urunler")
+    cursor.execute("SELECT * FROM urunler WHERE firma_kodu = ?", (firma_kodu,))
     urunler = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return urunler
@@ -86,99 +94,70 @@ def urun_ekle(urun: Urun):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        # YENİ EKLENEN: marka veritabanına yazılıyor
-        cursor.execute('''
-            INSERT INTO urunler (barkod, marka, isim, stok_adedi, skt, kategori, sube) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (urun.barkod, urun.marka, urun.isim, urun.stok_adedi, urun.skt, urun.kategori, urun.sube))
+        cursor.execute('INSERT INTO urunler VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (urun.barkod, urun.firma_kodu, urun.marka, urun.isim, urun.stok_adedi, urun.skt, urun.kategori, urun.sube))
         conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
-        raise HTTPException(status_code=400, detail="Bu barkoda sahip bir ürün zaten rafta var!")
-    
+        raise HTTPException(status_code=400, detail="Bu ürün firmanızda zaten kayıtlı!")
     conn.close()
-    return {"mesaj": "Ürün başarıyla eklendi", "urun": urun}
+    return {"mesaj": "Ürün eklendi"}
 
-@app.put("/stok-guncelle/{barkod}")
-def stok_guncelle(barkod: str, yeni_stok: int):
+@app.put("/stok-guncelle/{firma_kodu}/{barkod}")
+def stok_guncelle(firma_kodu: str, barkod: str, yeni_stok: int):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE urunler SET stok_adedi = ? WHERE barkod = ?", (yeni_stok, barkod))
-    if cursor.rowcount == 0:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    cursor.execute("UPDATE urunler SET stok_adedi = ? WHERE barkod = ? AND firma_kodu = ?", (yeni_stok, barkod, firma_kodu))
     conn.commit()
     conn.close()
     return {"mesaj": "Stok güncellendi."}
 
-@app.delete("/urun-zayi-bildir/{barkod}")
-def zayi_bildir(barkod: str, sebep: str):
+@app.delete("/urun-zayi-bildir/{firma_kodu}/{barkod}")
+def zayi_bildir(firma_kodu: str, barkod: str, sebep: str):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM urunler WHERE barkod = ?", (barkod,))
+    cursor.execute("SELECT * FROM urunler WHERE barkod = ? AND firma_kodu = ?", (barkod, firma_kodu))
     urun = cursor.fetchone()
-    if not urun:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
-        
-    zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # YENİ EKLENEN: marka arşiv tablosuna da ekleniyor
-    cursor.execute('''
-        INSERT INTO zayi_gecmisi (tarih, barkod, marka, isim, zayi_miktari, sebep)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (zaman, urun["barkod"], urun["marka"], urun["isim"], urun["stok_adedi"], sebep))
-    
-    cursor.execute("DELETE FROM urunler WHERE barkod = ?", (barkod,))
-    conn.commit()
+    if urun:
+        zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute('INSERT INTO zayi_gecmisi (firma_kodu, tarih, barkod, marka, isim, zayi_miktari, sebep) VALUES (?, ?, ?, ?, ?, ?, ?)', (firma_kodu, zaman, urun["barkod"], urun["marka"], urun["isim"], urun["stok_adedi"], sebep))
+        cursor.execute("DELETE FROM urunler WHERE barkod = ? AND firma_kodu = ?", (barkod, firma_kodu))
+        conn.commit()
     conn.close()
-    return {"mesaj": "Ürün zayi arşivine gönderildi."}
+    return {"mesaj": "Zayi bildirildi."}
 
-@app.get("/zayi-gecmisi/")
-def zayi_gecmisini_getir():
+@app.get("/zayi-gecmisi/{firma_kodu}")
+def zayi_gecmisini_getir(firma_kodu: str):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM zayi_gecmisi ORDER BY id DESC")
+    cursor.execute("SELECT * FROM zayi_gecmisi WHERE firma_kodu = ? ORDER BY id DESC", (firma_kodu,))
     gecmis = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return gecmis
 
-@app.post("/firsat-reyonuna-al/{barkod}")
-def firsat_reyonuna_al(barkod: str, yeni_fiyat: float):
+@app.post("/firsat-reyonuna-al/{firma_kodu}/{barkod}")
+def firsat_reyonuna_al(firma_kodu: str, barkod: str, yeni_fiyat: float):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM urunler WHERE barkod = ?", (barkod,))
+    cursor.execute("SELECT * FROM urunler WHERE barkod = ? AND firma_kodu = ?", (barkod, firma_kodu))
     urun = cursor.fetchone()
-    
-    if not urun:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
-        
-    zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # YENİ EKLENEN: marka fırsat reyonu tablosuna da ekleniyor
-    cursor.execute('''
-        INSERT INTO firsat_reyonu (barkod, marka, isim, kategori, stok_adedi, indirimli_fiyat, indirime_girdigi_tarih)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (urun["barkod"], urun["marka"], urun["isim"], urun["kategori"], urun["stok_adedi"], yeni_fiyat, zaman))
-    
-    cursor.execute("DELETE FROM urunler WHERE barkod = ?", (barkod,))
-    conn.commit()
+    if urun:
+        zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute('INSERT INTO firsat_reyonu (firma_kodu, barkod, marka, isim, kategori, stok_adedi, indirimli_fiyat, indirime_girdigi_tarih) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (firma_kodu, urun["barkod"], urun["marka"], urun["isim"], urun["kategori"], urun["stok_adedi"], yeni_fiyat, zaman))
+        cursor.execute("DELETE FROM urunler WHERE barkod = ? AND firma_kodu = ?", (barkod, firma_kodu))
+        conn.commit()
     conn.close()
-    return {"mesaj": "Ürün fırsat reyonuna taşındı."}
+    return {"mesaj": "Fırsata alındı."}
 
-@app.get("/firsat-reyonu/")
-def firsat_reyonunu_getir():
+@app.get("/firsat-reyonu/{firma_kodu}")
+def firsat_reyonunu_getir(firma_kodu: str):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM firsat_reyonu ORDER BY id DESC")
+    cursor.execute("SELECT * FROM firsat_reyonu WHERE firma_kodu = ? ORDER BY id DESC", (firma_kodu,))
     firsatlar = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return firsatlar
-    
+
 @app.get("/manifest.json")
-def get_manifest():
-    return FileResponse("manifest.json")
-
+def get_manifest(): return FileResponse("manifest.json")
 @app.get("/sw.js")
-def get_sw():
-    return FileResponse("sw.js")
-
+def get_sw(): return FileResponse("sw.js")
