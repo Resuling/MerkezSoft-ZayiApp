@@ -9,8 +9,7 @@ import os # YENİ EKLENDİ
 app = FastAPI()
 
 # YENİ EKLENDİ: Uygulama başlarken eski veritabanını siler (Sıfırlama işlemi)
-if os.path.exists("zayiapp.db"):
-    os.remove("zayiapp.db")
+
 
 def get_db():
     conn = sqlite3.connect("zayiapp.db")
