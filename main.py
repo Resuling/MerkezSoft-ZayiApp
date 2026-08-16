@@ -4,12 +4,16 @@ from pydantic import BaseModel
 from datetime import datetime
 import sqlite3
 import hashlib
-import os # YENİ EKLENDİ
+import os
 
 app = FastAPI()
 
-# YENİ EKLENDİ: Uygulama başlarken eski veritabanını siler (Sıfırlama işlemi)
-
+# DİKKAT: ESKİ SORUNLU VERİTABANINI KALICI OLARAK SİLİYORUZ
+if os.path.exists("zayiapp.db"):
+    try:
+        os.remove("zayiapp.db")
+    except:
+        pass
 
 def get_db():
     conn = sqlite3.connect("zayiapp.db")
@@ -19,28 +23,38 @@ def get_db():
 def veritabani_kurulumu():
     conn = get_db()
     cursor = conn.cursor()
-    # YENİ: Kullanıcılar Tablosu
+    
     cursor.execute('''CREATE TABLE IF NOT EXISTS kullanicilar (kullanici_adi TEXT PRIMARY KEY, sifre TEXT, firma_kodu TEXT)''')
     
-    cursor.execute('''CREATE TABLE IF NOT EXISTS urunler (barkod TEXT, firma_kodu TEXT, marka TEXT, isim TEXT, stok_adedi INTEGER, skt TEXT, kategori TEXT, sube TEXT, PRIMARY KEY(barkod, firma_kodu))''')
+    # ÇÖZÜM BURADA: PRIMARY KEY artık 'id', böylece farklı firmalar aynı barkodu sorunsuzca ekleyebilir!
+    cursor.execute('''CREATE TABLE IF NOT EXISTS urunler (id INTEGER PRIMARY KEY AUTOINCREMENT, barkod TEXT, firma_kodu TEXT, marka TEXT, isim TEXT, stok_adedi INTEGER, skt TEXT, kategori TEXT, sube TEXT)''')
+    
     cursor.execute('''CREATE TABLE IF NOT EXISTS zayi_gecmisi (id INTEGER PRIMARY KEY AUTOINCREMENT, firma_kodu TEXT, tarih TEXT, barkod TEXT, marka TEXT, isim TEXT, zayi_miktari INTEGER, sebep TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS firsat_reyonu (id INTEGER PRIMARY KEY AUTOINCREMENT, firma_kodu TEXT, barkod TEXT, marka TEXT, isim TEXT, kategori TEXT, stok_adedi INTEGER, indirimli_fiyat REAL, indirime_girdigi_tarih TEXT)''')
+    
     conn.commit()
     conn.close()
 
 veritabani_kurulumu()
 
-# YENİ: Şifre Kriptolama Fonksiyonu (Güvenlik için)
 def sifre_hashle(sifre: str):
     return hashlib.sha256(sifre.encode()).hexdigest()
 
-# YENİ: Kullanıcı Pydantic Modeli
 class Kullanici(BaseModel):
     kullanici_adi: str
     sifre: str
     firma_kodu: str = None
 
-# ----------------- KULLANICI GİRİŞ/KAYIT API'LERİ -----------------
+class Urun(BaseModel):
+    barkod: str
+    firma_kodu: str 
+    marka: str
+    isim: str
+    stok_adedi: int
+    skt: str
+    kategori: str
+    sube: str
+
 @app.post("/kayit/")
 def kullanici_kayit(kul: Kullanici):
     if not kul.firma_kodu:
@@ -70,23 +84,14 @@ def kullanici_giris(kul: Kullanici):
     else:
         raise HTTPException(status_code=401, detail="Hatalı kullanıcı adı veya şifre!")
 
-# ----------------- ÜRÜN VE ZAYİ API'LERİ -----------------
-class Urun(BaseModel):
-    barkod: str
-    firma_kodu: str 
-    marka: str
-    isim: str
-    stok_adedi: int
-    skt: str
-    kategori: str
-    sube: str
-
 @app.get("/")
-def ana_sayfa(): return FileResponse("index.html")
+def ana_sayfa(): 
+    return FileResponse("index.html")
 
 @app.get("/app")
-def uygulama_sayfasi(): return FileResponse("app.html")
-    
+def uygulama_sayfasi(): 
+    return FileResponse("app.html")
+
 @app.get("/urunler/{firma_kodu}")
 def urunleri_getir(firma_kodu: str):
     conn = get_db()
@@ -100,12 +105,18 @@ def urunleri_getir(firma_kodu: str):
 def urun_ekle(urun: Urun):
     conn = get_db()
     cursor = conn.cursor()
-    try:
-        cursor.execute('INSERT INTO urunler VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (urun.barkod, urun.firma_kodu, urun.marka, urun.isim, urun.stok_adedi, urun.skt, urun.kategori, urun.sube))
-        conn.commit()
-    except sqlite3.IntegrityError:
+    
+    # AYNI FİRMANIN AYNI BARKODU 2 KERE EKLEMESİNİ ENGELLE
+    cursor.execute("SELECT * FROM urunler WHERE barkod = ? AND firma_kodu = ?", (urun.barkod, urun.firma_kodu))
+    mevcut_urun = cursor.fetchone()
+    
+    if mevcut_urun:
         conn.close()
         raise HTTPException(status_code=400, detail="Bu ürün firmanızda zaten kayıtlı!")
+    else:
+        cursor.execute('INSERT INTO urunler (barkod, firma_kodu, marka, isim, stok_adedi, skt, kategori, sube) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (urun.barkod, urun.firma_kodu, urun.marka, urun.isim, urun.stok_adedi, urun.skt, urun.kategori, urun.sube))
+        conn.commit()
+    
     conn.close()
     return {"mesaj": "Ürün eklendi"}
 
