@@ -30,14 +30,12 @@
                 <li class="nav-item"><a class="nav-link" onclick="tabDegistir('kayit')">Kayıt Ol</a></li>
             </ul>
 
-            <!-- Giriş Formu -->
             <div id="formGiris">
                 <input type="text" id="gKullanici" class="form-control mb-2" placeholder="Kullanıcı Adı">
                 <input type="password" id="gSifre" class="form-control mb-3" placeholder="Şifre">
                 <button class="btn btn-primary w-100 fw-bold" onclick="girisYap()">Giriş Yap</button>
             </div>
 
-            <!-- Kayıt Formu -->
             <div id="formKayit" style="display: none;">
                 <input type="text" id="kFirma" class="form-control mb-2 border-primary" placeholder="Firma Kodu (Örn: A101-MERKEZ)">
                 <input type="text" id="kKullanici" class="form-control mb-2" placeholder="Kullanıcı Adı Belirleyin">
@@ -60,7 +58,7 @@
         </div>
     </nav>
 
-    <!-- ANA İÇERİK (Buradan sonrası aynı) -->
+    <!-- ANA İÇERİK -->
     <div class="container" id="anaIcerik" style="display: none;">
         
         <div class="row justify-content-center">
@@ -155,6 +153,7 @@
                     </div></div>
                 </div>
 
+                <!-- GÜNCELLENEN KISIM: Fırsat Reyonu Tablosuna İşlem Sütunu Eklendi -->
                 <div class="card shadow-sm border-success">
                     <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                         <span>📉 Fırsat Reyonu (İndirimler)</span>
@@ -162,7 +161,9 @@
                     </div>
                     <div class="card-body p-0"><div class="table-responsive" style="max-height: 250px;">
                         <table class="table table-sm table-hover align-middle mb-0" id="tabloFirsat">
-                            <thead class="table-light sticky-top"><tr><th>Barkod</th><th>Marka</th><th>İsim</th><th>Stok</th><th>Yeni Fiyat</th><th>Tarih</th></tr></thead>
+                            <thead class="table-light sticky-top">
+                                <tr><th>Barkod</th><th>Marka</th><th>İsim</th><th>Stok</th><th>Yeni Fiyat</th><th>Tarih</th><th>İşlem</th></tr>
+                            </thead>
                             <tbody id="firsatTablosu"></tbody>
                         </table>
                     </div></div>
@@ -179,7 +180,6 @@
         let globalUrunler = []; 
         let html5QrCode;
 
-        // EKRAN YÖNETİMİ
         if (FIRMA_KODU && KULLANICI_ADI) {
             document.getElementById("authModal").style.display = "none";
             document.getElementById("anaIcerik").style.display = "block";
@@ -187,7 +187,6 @@
             uygulamayiBaslat();
         }
 
-        // TAB DEĞİŞTİRME MANTIĞI
         function tabDegistir(tab) {
             const linkler = document.querySelectorAll('.nav-link');
             linkler.forEach(l => l.classList.remove('active'));
@@ -204,7 +203,6 @@
             }
         }
 
-        // KAYIT OL İŞLEMİ
         async function kayitOl() {
             const firma = document.getElementById("kFirma").value.trim();
             const kul = document.getElementById("kKullanici").value.trim();
@@ -229,7 +227,6 @@
             }
         }
 
-        // GİRİŞ YAP İŞLEMİ
         async function girisYap() {
             const kul = document.getElementById("gKullanici").value.trim();
             const sifre = document.getElementById("gSifre").value.trim();
@@ -253,7 +250,6 @@
             }
         }
 
-        // ÇIKIŞ YAP İŞLEMİ
         function cikisYap() {
             localStorage.removeItem("zayi_firma_kodu");
             localStorage.removeItem("zayi_kullanici_adi");
@@ -266,7 +262,6 @@
             firsatReyonunuGetir();
         }
 
-        // ---------- KAMERA VE ARAMA İŞLEMLERİ ----------
         function kamerayiAc(hedefInputId) {
             const kameraKutusu = document.getElementById("kameraKutusu");
             kameraKutusu.style.display = "block";
@@ -299,7 +294,6 @@
             else { ekranaCiz(globalUrunler); }
         });
 
-        // ---------- VERİ ÇEKME VE İŞLEME ----------
         async function urunleriGetir() {
             const response = await fetch(`${API_URL}/urunler/${FIRMA_KODU}`);
             globalUrunler = await response.json();
@@ -351,18 +345,36 @@
             });
         }
 
+        // GÜNCELLENEN KISIM: Fırsat Reyonu Satırlarına "Zayi" Butonu Eklendi
         async function firsatReyonunuGetir() {
             const response = await fetch(`${API_URL}/firsat-reyonu/${FIRMA_KODU}`);
             const firsatlar = await response.json();
             const tablo = document.getElementById("firsatTablosu");
             tablo.innerHTML = ""; 
             firsatlar.forEach(urun => {
-                tablo.innerHTML += `<tr><td><strong>${urun.barkod}</strong></td><td><span class="text-primary fw-bold">${urun.marka}</span></td><td>${urun.isim}</td><td><span class="badge bg-success">${urun.stok_adedi}</span></td><td><strong class="text-success fs-5">${urun.indirimli_fiyat} ₺</strong></td><td><small class="text-muted">${urun.indirime_girdigi_tarih.split(" ")[0]}</small></td></tr>`;
+                tablo.innerHTML += `<tr>
+                    <td><strong>${urun.barkod}</strong></td>
+                    <td><span class="text-primary fw-bold">${urun.marka}</span></td>
+                    <td>${urun.isim}</td>
+                    <td><span class="badge bg-success">${urun.stok_adedi}</span></td>
+                    <td><strong class="text-success fs-5">${urun.indirimli_fiyat} ₺</strong></td>
+                    <td><small class="text-muted">${urun.indirime_girdigi_tarih.split(" ")[0]}</small></td>
+                    <td><button class="btn btn-danger btn-sm" onclick="firsattanZayiye('${urun.barkod}')">🗑️ Zayi</button></td>
+                </tr>`;
             });
             document.getElementById("statFirsatUrun").innerText = firsatlar.length;
         }
 
-        // ---------- FORMLAR VE AKSİYONLAR ----------
+        // YENİ EKLENEN KISIM: Fırsattan Zayiye Taşıma İşlemi
+        async function firsattanZayiye(barkod) {
+            const sebep = prompt("Fırsat reyonundan zayiye çıkarma sebebini girin (Örn: SKT Tamamen Geçti, Çöpe Atıldı):");
+            if (sebep) {
+                await fetch(`${API_URL}/firsattan-zayiye-al/${FIRMA_KODU}/${barkod}?sebep=${sebep}`, { method: "DELETE" });
+                firsatReyonunuGetir();
+                zayiGecmisiGetir();
+            }
+        }
+
         document.getElementById("urunForm").addEventListener("submit", async function(event) {
             event.preventDefault(); 
             const yeniUrun = {
