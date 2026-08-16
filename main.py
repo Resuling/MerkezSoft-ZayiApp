@@ -80,6 +80,9 @@ class Urun(BaseModel):
 @app.get("/")
 def ana_sayfa(): return FileResponse("index.html")
 
+@app.get("/app")
+def uygulama_sayfasi(): return FileResponse("app.html")
+    
 @app.get("/urunler/{firma_kodu}")
 def urunleri_getir(firma_kodu: str):
     conn = get_db()
