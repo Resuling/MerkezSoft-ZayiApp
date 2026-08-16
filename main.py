@@ -193,7 +193,28 @@ def firsat_reyonunu_getir(firma_kodu: str):
     cursor.close()
     conn.close()
     return firsatlar
-
+@app.delete("/firsattan-zayiye-al/{firma_kodu}/{barkod}")
+def firsattan_zayiye_al(firma_kodu: str, barkod: str, sebep: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Ürünü fırsat reyonundan bul
+    cursor.execute("SELECT * FROM firsat_reyonu WHERE barkod = %s AND firma_kodu = %s", (barkod, firma_kodu))
+    urun = cursor.fetchone()
+    
+    if urun:
+        zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Zayi geçmişine kaydet
+        cursor.execute('INSERT INTO zayi_gecmisi (firma_kodu, tarih, barkod, marka, isim, zayi_miktari, sebep) VALUES (%s, %s, %s, %s, %s, %s, %s)', 
+                       (firma_kodu, zaman, urun["barkod"], urun["marka"], urun["isim"], urun["stok_adedi"], sebep))
+        
+        # Fırsat reyonundan tamamen sil
+        cursor.execute("DELETE FROM firsat_reyonu WHERE barkod = %s AND firma_kodu = %s", (barkod, firma_kodu))
+        conn.commit()
+        
+    cursor.close()
+    conn.close()
+    return {"mesaj": "Fırsattan zayiye alındı."}
 @app.get("/manifest.json")
 def get_manifest(): return FileResponse("manifest.json")
 @app.get("/sw.js")
