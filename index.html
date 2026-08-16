@@ -4,30 +4,65 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZayiApp - MerkezSoft</title>
-    <!-- PWA AYARLARI -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#0d6efd">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2892/2892809.png">
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
-        }
-    </script>
+    <script>if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }</script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        #authModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .auth-box { background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .nav-tabs .nav-link { cursor: pointer; color: #495057; font-weight: bold; }
+        .nav-tabs .nav-link.active { color: #0d6efd; }
+    </style>
 </head>
 <body class="bg-light">
 
+    <!-- GİRİŞ / KAYIT EKRANI -->
+    <div id="authModal">
+        <div class="auth-box">
+            <h3 class="fw-bold text-primary text-center mb-4">📦 ZayiApp B2B</h3>
+            
+            <ul class="nav nav-tabs mb-3" id="authTabs">
+                <li class="nav-item"><a class="nav-link active" onclick="tabDegistir('giris')">Giriş Yap</a></li>
+                <li class="nav-item"><a class="nav-link" onclick="tabDegistir('kayit')">Kayıt Ol</a></li>
+            </ul>
+
+            <!-- Giriş Formu -->
+            <div id="formGiris">
+                <input type="text" id="gKullanici" class="form-control mb-2" placeholder="Kullanıcı Adı">
+                <input type="password" id="gSifre" class="form-control mb-3" placeholder="Şifre">
+                <button class="btn btn-primary w-100 fw-bold" onclick="girisYap()">Giriş Yap</button>
+            </div>
+
+            <!-- Kayıt Formu -->
+            <div id="formKayit" style="display: none;">
+                <input type="text" id="kFirma" class="form-control mb-2 border-primary" placeholder="Firma Kodu (Örn: A101-MERKEZ)">
+                <input type="text" id="kKullanici" class="form-control mb-2" placeholder="Kullanıcı Adı Belirleyin">
+                <input type="password" id="kSifre" class="form-control mb-3" placeholder="Şifre Belirleyin">
+                <button class="btn btn-success w-100 fw-bold" onclick="kayitOl()">Hesap Oluştur</button>
+            </div>
+            
+            <div id="authMesaj" class="mt-3 text-center fw-bold"></div>
+        </div>
+    </div>
+
+    <!-- ÜST MENÜ -->
     <nav class="navbar navbar-dark bg-dark mb-4">
-        <div class="container">
-            <span class="navbar-brand mb-0 h1">📦 MerkezSoft ZayiApp Yönetim Paneli</span>
+        <div class="container d-flex justify-content-between">
+            <span class="navbar-brand mb-0 h1">📦 MerkezSoft ZayiApp</span>
+            <div>
+                <span class="text-warning fw-bold me-3" id="aktifFirmaAdi"></span>
+                <button class="btn btn-sm btn-outline-light" onclick="cikisYap()">Çıkış Yap</button>
+            </div>
         </div>
     </nav>
 
-    <div class="container">
+    <!-- ANA İÇERİK (Buradan sonrası aynı) -->
+    <div class="container" id="anaIcerik" style="display: none;">
         
-        <!-- YENİ EKLENEN: Merkezi Kamera Ekranı (Tüm okuma işlemleri burada görünür) -->
         <div class="row justify-content-center">
             <div class="col-md-6">
                 <div id="kameraKutusu" style="display: none; margin-bottom: 20px; border-radius: 8px; overflow: hidden; border: 3px solid #0d6efd; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></div>
@@ -35,30 +70,18 @@
         </div>
 
         <div class="row mb-4">
-            <div class="col-md-4">
-                <div class="card bg-primary text-white shadow-sm h-100">
-                    <div class="card-body">
-                        <h6 class="card-title text-uppercase text-white-50">Toplam Aktif Ürün</h6>
-                        <h2 class="display-5 fw-bold mb-0" id="statToplamUrun">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card bg-warning text-dark shadow-sm h-100">
-                    <div class="card-body">
-                        <h6 class="card-title text-uppercase text-muted">Kritik SKT Alarmı</h6>
-                        <h2 class="display-5 fw-bold mb-0" id="statRiskliUrun">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card bg-success text-white shadow-sm h-100">
-                    <div class="card-body">
-                        <h6 class="card-title text-uppercase text-white-50">Fırsat Reyonu (Kurtarılan)</h6>
-                        <h2 class="display-5 fw-bold mb-0" id="statFirsatUrun">0</h2>
-                    </div>
-                </div>
-            </div>
+            <div class="col-md-4"><div class="card bg-primary text-white shadow-sm h-100"><div class="card-body">
+                <h6 class="card-title text-uppercase text-white-50">Toplam Aktif Ürün</h6>
+                <h2 class="display-5 fw-bold mb-0" id="statToplamUrun">0</h2>
+            </div></div></div>
+            <div class="col-md-4"><div class="card bg-warning text-dark shadow-sm h-100"><div class="card-body">
+                <h6 class="card-title text-uppercase text-muted">Kritik SKT Alarmı</h6>
+                <h2 class="display-5 fw-bold mb-0" id="statRiskliUrun">0</h2>
+            </div></div></div>
+            <div class="col-md-4"><div class="card bg-success text-white shadow-sm h-100"><div class="card-body">
+                <h6 class="card-title text-uppercase text-white-50">Fırsat Reyonu (Kurtarılan)</h6>
+                <h2 class="display-5 fw-bold mb-0" id="statFirsatUrun">0</h2>
+            </div></div></div>
         </div>
 
         <div class="row">
@@ -67,18 +90,16 @@
                     <div class="card-header bg-dark text-white">➕ Yeni Ürün Ekle</div>
                     <div class="card-body">
                         <form id="urunForm">
-                            <!-- Barkod Ekleme Kutusu -->
                             <div class="mb-2 input-group">
                                 <input type="text" id="barkod" class="form-control" placeholder="Barkod" required>
                                 <button class="btn btn-outline-primary fw-bold" type="button" onclick="kamerayiAc('barkod')">📷 Tara</button>
                             </div>
-                            
-                            <div class="mb-2"><input type="text" id="marka" class="form-control" placeholder="Marka (Örn: Sütaş)" required></div>
+                            <div class="mb-2"><input type="text" id="marka" class="form-control" placeholder="Marka" required></div>
                             <div class="mb-2"><input type="text" id="isim" class="form-control" placeholder="Ürün İsmi" required></div>
                             <div class="mb-2"><input type="number" id="stok" class="form-control" placeholder="Stok Adedi" required></div>
                             <div class="mb-2"><label class="form-label text-muted small mb-0">Son Kullanma Tarihi</label><input type="date" id="skt" class="form-control" required></div>
                             <div class="mb-2"><input type="text" id="kategori" class="form-control" placeholder="Kategori" required></div>
-                            <div class="mb-3"><input type="text" id="sube" class="form-control" placeholder="Şube" required></div>
+                            <div class="mb-3"><input type="text" id="sube" class="form-control" placeholder="Şube / Lokasyon" required></div>
                             <button type="submit" class="btn btn-primary w-100">Sisteme Ekle</button>
                         </form>
                     </div>
@@ -87,45 +108,32 @@
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
                         <span>🗑️ Zayi Arşivi</span>
-                        <button class="btn btn-sm btn-light text-danger fw-bold" onclick="excelIndir('tabloZayi', 'MerkezSoft_Zayi_Raporu')">📊 Excel</button>
+                        <button class="btn btn-sm btn-light text-danger fw-bold" onclick="excelIndir('tabloZayi', 'Zayi_Raporu')">📊 Excel</button>
                     </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 300px;">
-                            <table class="table table-sm table-striped mb-0" id="tabloZayi">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>Marka & Ürün</th>
-                                        <th>Miktar</th>
-                                        <th>Sebep</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="zayiTablosu"></tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <div class="card-body p-0"><div class="table-responsive" style="max-height: 300px;">
+                        <table class="table table-sm table-striped mb-0" id="tabloZayi">
+                            <thead class="table-light sticky-top"><tr><th>Ürün</th><th>Miktar</th><th>Sebep</th></tr></thead>
+                            <tbody id="zayiTablosu"></tbody>
+                        </table>
+                    </div></div>
                 </div>
             </div>
 
             <div class="col-md-8">
-                
-                <!-- YENİ EKLENEN: Hızlı Ürün Bulma / Arama Çubuğu -->
                 <div class="card shadow-sm mb-4 border-primary">
                     <div class="card-body bg-primary bg-opacity-10">
-                        <h5 class="mb-3 text-primary fw-bold">🔍 Hızlı Ürün Bul (İşlem Yap)</h5>
+                        <h5 class="mb-3 text-primary fw-bold">🔍 Hızlı Ürün Bul</h5>
                         <div class="input-group">
-                            <input type="text" id="aramaBarkod" class="form-control form-control-lg" placeholder="Barkodu okutun veya elle yazın...">
+                            <input type="text" id="aramaBarkod" class="form-control form-control-lg" placeholder="Barkodu okutun...">
                             <button class="btn btn-primary fw-bold px-4" type="button" onclick="kamerayiAc('aramaBarkod')">📷 Kamerayla Bul</button>
                             <button class="btn btn-secondary px-3" type="button" onclick="aramaTemizle()">Tümünü Gör</button>
                         </div>
-                        <small class="text-muted mt-1 d-block">Barkodu okuttuğunuz an ürün aşağıda filtrelenir, anında stok/zayi/indirim işlemi yapabilirsiniz.</small>
                     </div>
                 </div>
 
                 <div class="card shadow-sm mb-4 border-warning">
-                    <div class="card-body d-flex align-items-center justify-content-between bg-warning bg-opacity-10">
-                        <div>
-                            <h5 class="mb-0 text-warning fw-bold">⚠️ Manuel SKT Sorgula</h5>
-                        </div>
+                    <div class="card-body d-flex justify-content-between bg-warning bg-opacity-10">
+                        <h5 class="mb-0 text-warning fw-bold">⚠️ Manuel SKT Sorgula</h5>
                         <div class="d-flex">
                             <input type="date" id="sktSorguTarih" class="form-control form-control-sm me-2">
                             <button class="btn btn-warning btn-sm fw-bold" onclick="sktSorgula()">Bul</button>
@@ -137,69 +145,132 @@
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <span>🛒 Aktif Raf / Depo Durumu</span>
-                        <button class="btn btn-sm btn-light text-primary fw-bold" onclick="excelIndir('tabloUrunler', 'MerkezSoft_Aktif_Stok_Raporu')">📊 Excel</button>
+                        <button class="btn btn-sm btn-light text-primary fw-bold" onclick="excelIndir('tabloUrunler', 'Aktif_Stok_Raporu')">📊 Excel</button>
                     </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 350px;">
-                            <table class="table table-striped table-hover align-middle mb-0" id="tabloUrunler">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>Barkod</th>
-                                        <th>Marka</th>
-                                        <th>İsim</th>
-                                        <th>Stok</th>
-                                        <th>SKT Durumu</th>
-                                        <th class="text-end">İşlemler</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="urunTablosu"></tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <div class="card-body p-0"><div class="table-responsive" style="max-height: 350px;">
+                        <table class="table table-striped table-hover align-middle mb-0" id="tabloUrunler">
+                            <thead class="table-light sticky-top"><tr><th>Barkod</th><th>Marka</th><th>İsim</th><th>Stok</th><th>SKT Durumu</th><th class="text-end">İşlemler</th></tr></thead>
+                            <tbody id="urunTablosu"></tbody>
+                        </table>
+                    </div></div>
                 </div>
 
                 <div class="card shadow-sm border-success">
                     <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                        <span>📉 Fırsat Reyonu (İndirimli Ürünler)</span>
-                        <button class="btn btn-sm btn-light text-success fw-bold" onclick="excelIndir('tabloFirsat', 'MerkezSoft_Firsat_Reyonu_Raporu')">📊 Excel</button>
+                        <span>📉 Fırsat Reyonu (İndirimler)</span>
+                        <button class="btn btn-sm btn-light text-success fw-bold" onclick="excelIndir('tabloFirsat', 'Firsat_Reyonu_Raporu')">📊 Excel</button>
                     </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 250px;">
-                            <table class="table table-sm table-hover align-middle mb-0" id="tabloFirsat">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>Barkod</th>
-                                        <th>Marka</th>
-                                        <th>Ürün İsmi</th>
-                                        <th>Kalan Stok</th>
-                                        <th>Yeni Fiyat</th>
-                                        <th>Kayıt</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="firsatTablosu"></tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <div class="card-body p-0"><div class="table-responsive" style="max-height: 250px;">
+                        <table class="table table-sm table-hover align-middle mb-0" id="tabloFirsat">
+                            <thead class="table-light sticky-top"><tr><th>Barkod</th><th>Marka</th><th>İsim</th><th>Stok</th><th>Yeni Fiyat</th><th>Tarih</th></tr></thead>
+                            <tbody id="firsatTablosu"></tbody>
+                        </table>
+                    </div></div>
                 </div>
-
             </div>
         </div>
     </div>
 
     <!-- API İLE İLETİŞİM -->
     <script>
-        const API_URL = "https://merkezsoft-zayiapp.onrender.com"; // CANLI SUNUCU ADRESİNİZ
-        
-        // Ürünleri hafızada tutarak anında arama yapmamızı sağlayan global değişken
+        const API_URL = "https://merkezsoft-zayiapp.onrender.com";
+        let FIRMA_KODU = localStorage.getItem("zayi_firma_kodu");
+        let KULLANICI_ADI = localStorage.getItem("zayi_kullanici_adi");
         let globalUrunler = []; 
-
         let html5QrCode;
 
-        // YENİ EKLENEN: Kamera artık hangi kutuya veri yazacağını (hedefInputId) biliyor
+        // EKRAN YÖNETİMİ
+        if (FIRMA_KODU && KULLANICI_ADI) {
+            document.getElementById("authModal").style.display = "none";
+            document.getElementById("anaIcerik").style.display = "block";
+            document.getElementById("aktifFirmaAdi").innerText = FIRMA_KODU + " (" + KULLANICI_ADI + ")";
+            uygulamayiBaslat();
+        }
+
+        // TAB DEĞİŞTİRME MANTIĞI
+        function tabDegistir(tab) {
+            const linkler = document.querySelectorAll('.nav-link');
+            linkler.forEach(l => l.classList.remove('active'));
+            document.getElementById("formGiris").style.display = "none";
+            document.getElementById("formKayit").style.display = "none";
+            document.getElementById("authMesaj").innerText = "";
+
+            if(tab === 'giris') {
+                document.getElementById("formGiris").style.display = "block";
+                linkler[0].classList.add('active');
+            } else {
+                document.getElementById("formKayit").style.display = "block";
+                linkler[1].classList.add('active');
+            }
+        }
+
+        // KAYIT OL İŞLEMİ
+        async function kayitOl() {
+            const firma = document.getElementById("kFirma").value.trim();
+            const kul = document.getElementById("kKullanici").value.trim();
+            const sifre = document.getElementById("kSifre").value.trim();
+            const mesaj = document.getElementById("authMesaj");
+
+            if(!firma || !kul || !sifre) { mesaj.innerText = "Lütfen tüm alanları doldurun!"; mesaj.className = "mt-3 text-danger fw-bold"; return; }
+
+            const res = await fetch(`${API_URL}/kayit/`, {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ kullanici_adi: kul, sifre: sifre, firma_kodu: firma })
+            });
+            const data = await res.json();
+
+            if(res.ok) {
+                mesaj.innerText = "Kayıt Başarılı! Giriş yapabilirsiniz.";
+                mesaj.className = "mt-3 text-success fw-bold";
+                setTimeout(() => tabDegistir('giris'), 1500);
+            } else {
+                mesaj.innerText = data.detail;
+                mesaj.className = "mt-3 text-danger fw-bold";
+            }
+        }
+
+        // GİRİŞ YAP İŞLEMİ
+        async function girisYap() {
+            const kul = document.getElementById("gKullanici").value.trim();
+            const sifre = document.getElementById("gSifre").value.trim();
+            const mesaj = document.getElementById("authMesaj");
+
+            if(!kul || !sifre) { mesaj.innerText = "Kullanıcı adı ve şifre giriniz!"; mesaj.className = "mt-3 text-danger fw-bold"; return; }
+
+            const res = await fetch(`${API_URL}/giris/`, {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ kullanici_adi: kul, sifre: sifre })
+            });
+            const data = await res.json();
+
+            if(res.ok) {
+                localStorage.setItem("zayi_firma_kodu", data.firma_kodu);
+                localStorage.setItem("zayi_kullanici_adi", data.kullanici_adi);
+                location.reload();
+            } else {
+                mesaj.innerText = data.detail;
+                mesaj.className = "mt-3 text-danger fw-bold";
+            }
+        }
+
+        // ÇIKIŞ YAP İŞLEMİ
+        function cikisYap() {
+            localStorage.removeItem("zayi_firma_kodu");
+            localStorage.removeItem("zayi_kullanici_adi");
+            location.reload();
+        }
+
+        function uygulamayiBaslat() {
+            urunleriGetir();
+            zayiGecmisiGetir();
+            firsatReyonunuGetir();
+        }
+
+        // ---------- KAMERA VE ARAMA İŞLEMLERİ ----------
         function kamerayiAc(hedefInputId) {
             const kameraKutusu = document.getElementById("kameraKutusu");
             kameraKutusu.style.display = "block";
-            kameraKutusu.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Kameraya kaydır
+            kameraKutusu.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
             if (!html5QrCode) { html5QrCode = new Html5Qrcode("kameraKutusu"); }
 
@@ -207,67 +278,34 @@
                 { facingMode: "environment" },
                 { fps: 10, qrbox: { width: 250, height: 100 } },
                 (decodedText, decodedResult) => {
-                    // Sesi çal
                     let audio = new Audio('https://www.soundjay.com/buttons/sounds/button-09.mp3');
-                    audio.play().catch(e => console.log("Ses çalınamadı", e));
+                    audio.play().catch(e => console.log(e));
 
-                    // Hedef kutuya barkodu yaz
-                    const hedefKutu = document.getElementById(hedefInputId);
-                    hedefKutu.value = decodedText; 
-                    
-                    // Kamerayı kapat
+                    document.getElementById(hedefInputId).value = decodedText; 
                     html5QrCode.stop().then(() => {
                         kameraKutusu.style.display = "none";
-                        
-                        // EĞER ARAMA KUTUSUNDAN OKUTULDUYSA OTOMATİK ARA
-                        if(hedefInputId === 'aramaBarkod') {
-                            urunAra(decodedText);
-                        }
-                    }).catch(err => console.log(err));
+                        if(hedefInputId === 'aramaBarkod') { urunAra(decodedText); }
+                    });
                 },
-                (errorMessage) => { /* Hataları yoksay */ }
-            ).catch((err) => {
-                alert("Kameraya erişilemedi!");
-                kameraKutusu.style.display = "none";
-            });
+                (errorMessage) => { }
+            ).catch((err) => { alert("Kameraya erişilemedi!"); kameraKutusu.style.display = "none"; });
         }
 
-        // Arama işlemi - Ekrana sadece eşleşen ürünü çizer
-        function urunAra(arananBarkod) {
-            const filtrelenmis = globalUrunler.filter(u => u.barkod === arananBarkod);
-            ekranaCiz(filtrelenmis);
-        }
-
-        // Arama çubuğunu temizler ve tüm ürünleri geri getirir
-        function aramaTemizle() {
-            document.getElementById("aramaBarkod").value = "";
-            ekranaCiz(globalUrunler);
-        }
-
-        // Manuel input (klavye) ile arama yapıldığında anında filtrele
+        function urunAra(arananBarkod) { ekranaCiz(globalUrunler.filter(u => u.barkod === arananBarkod)); }
+        function aramaTemizle() { document.getElementById("aramaBarkod").value = ""; ekranaCiz(globalUrunler); }
         document.getElementById("aramaBarkod").addEventListener("input", function(e) {
             const deger = e.target.value.trim();
-            if(deger.length > 0) {
-                const filtrelenmis = globalUrunler.filter(u => u.barkod.includes(deger) || u.isim.toLowerCase().includes(deger.toLowerCase()));
-                ekranaCiz(filtrelenmis);
-            } else {
-                ekranaCiz(globalUrunler);
-            }
+            if(deger.length > 0) { ekranaCiz(globalUrunler.filter(u => u.barkod.includes(deger) || u.isim.toLowerCase().includes(deger.toLowerCase()))); } 
+            else { ekranaCiz(globalUrunler); }
         });
 
-        function excelIndir(tabloID, dosyaAdi) {
-            let tablo = document.getElementById(tabloID);
-            let wb = XLSX.utils.table_to_book(tablo, {sheet: "Rapor"});
-            XLSX.writeFile(wb, dosyaAdi + ".xlsx");
-        }
-
+        // ---------- VERİ ÇEKME VE İŞLEME ----------
         async function urunleriGetir() {
-            const response = await fetch(`${API_URL}/urunler/`);
+            const response = await fetch(`${API_URL}/urunler/${FIRMA_KODU}`);
             globalUrunler = await response.json();
             ekranaCiz(globalUrunler);
         }
 
-        // Tablo çizim işlemini ayrı bir fonksiyona aldık ki arama yaparken kolayca kullanalım
         function ekranaCiz(urunListesi) {
             const tablo = document.getElementById("urunTablosu");
             tablo.innerHTML = ""; 
@@ -292,73 +330,44 @@
                         <td><span class="badge bg-primary fs-6">${urun.stok_adedi}</span></td>
                         <td><div><small class="text-muted">${urun.skt}</small></div>${sktEtiketi}</td>
                         <td class="text-end">
-                            <button class="btn btn-outline-secondary btn-sm mb-1" onclick="stokGuncelle('${urun.barkod}', '${urun.marka} ${urun.isim}', ${urun.stok_adedi})" title="Stok Güncelle">🔄</button>
-                            <button class="btn btn-success btn-sm mb-1" onclick="firsataAl('${urun.barkod}', '${urun.marka} ${urun.isim}')">📉</button>
-                            <button class="btn btn-danger btn-sm mb-1" onclick="zayiBildir('${urun.barkod}', '${urun.marka} ${urun.isim}')">🗑️</button>
+                            <button class="btn btn-outline-secondary btn-sm mb-1" onclick="stokGuncelle('${urun.barkod}', '${urun.stok_adedi}')">🔄</button>
+                            <button class="btn btn-success btn-sm mb-1" onclick="firsataAl('${urun.barkod}')">📉</button>
+                            <button class="btn btn-danger btn-sm mb-1" onclick="zayiBildir('${urun.barkod}')">🗑️</button>
                         </td>
                     </tr>
                 `;
             });
-            document.getElementById("statToplamUrun").innerText = globalUrunler.length; // Toplam ürün her zaman veritabanı sayısını göstersin
+            document.getElementById("statToplamUrun").innerText = globalUrunler.length;
             document.getElementById("statRiskliUrun").innerText = riskliSayisi;
         }
 
         async function zayiGecmisiGetir() {
-            const response = await fetch(`${API_URL}/zayi-gecmisi/`);
+            const response = await fetch(`${API_URL}/zayi-gecmisi/${FIRMA_KODU}`);
             const gecmis = await response.json();
             const tablo = document.getElementById("zayiTablosu");
             tablo.innerHTML = ""; 
             gecmis.forEach(kayit => {
-                tablo.innerHTML += `
-                    <tr>
-                        <td><small><strong class="text-primary">${kayit.marka}</strong> ${kayit.isim}<br><span class="text-muted">${kayit.barkod}</span></small></td>
-                        <td>${kayit.zayi_miktari}</td>
-                        <td><span class="badge bg-danger">${kayit.sebep}</span></td>
-                    </tr>
-                `;
+                tablo.innerHTML += `<tr><td><small><strong class="text-primary">${kayit.marka}</strong> ${kayit.isim}<br><span class="text-muted">${kayit.barkod}</span></small></td><td>${kayit.zayi_miktari}</td><td><span class="badge bg-danger">${kayit.sebep}</span></td></tr>`;
             });
         }
 
         async function firsatReyonunuGetir() {
-            const response = await fetch(`${API_URL}/firsat-reyonu/`);
+            const response = await fetch(`${API_URL}/firsat-reyonu/${FIRMA_KODU}`);
             const firsatlar = await response.json();
             const tablo = document.getElementById("firsatTablosu");
             tablo.innerHTML = ""; 
             firsatlar.forEach(urun => {
-                tablo.innerHTML += `
-                    <tr>
-                        <td><strong>${urun.barkod}</strong></td>
-                        <td><span class="text-primary fw-bold">${urun.marka}</span></td>
-                        <td>${urun.isim}</td>
-                        <td><span class="badge bg-success">${urun.stok_adedi}</span></td>
-                        <td><strong class="text-success fs-5">${urun.indirimli_fiyat} ₺</strong></td>
-                        <td><small class="text-muted">${urun.indirime_girdigi_tarih.split(" ")[0]}</small></td>
-                    </tr>
-                `;
+                tablo.innerHTML += `<tr><td><strong>${urun.barkod}</strong></td><td><span class="text-primary fw-bold">${urun.marka}</span></td><td>${urun.isim}</td><td><span class="badge bg-success">${urun.stok_adedi}</span></td><td><strong class="text-success fs-5">${urun.indirimli_fiyat} ₺</strong></td><td><small class="text-muted">${urun.indirime_girdigi_tarih.split(" ")[0]}</small></td></tr>`;
             });
             document.getElementById("statFirsatUrun").innerText = firsatlar.length;
         }
 
-        async function firsataAl(barkod, tamIsim) {
-            const yeniFiyat = prompt(`DİKKAT: ${tamIsim} ürünü Fırsat Reyonuna taşınacak.\nLütfen indirimli fiyatı girin:`);
-            if (yeniFiyat !== null && yeniFiyat !== "") {
-                const response = await fetch(`${API_URL}/firsat-reyonuna-al/${barkod}?yeni_fiyat=${yeniFiyat}`, { method: "POST" });
-                if (response.ok) { urunleriGetir(); firsatReyonunuGetir(); }
-            }
-        }
-
-        async function stokGuncelle(barkod, tamIsim, mevcutStok) {
-            const yeniStok = prompt(`${tamIsim} için yeni stok miktarını girin:`, mevcutStok);
-            if (yeniStok !== null && yeniStok !== "") {
-                const response = await fetch(`${API_URL}/stok-guncelle/${barkod}?yeni_stok=${yeniStok}`, { method: "PUT" });
-                if (response.ok) urunleriGetir(); 
-            }
-        }
-
+        // ---------- FORMLAR VE AKSİYONLAR ----------
         document.getElementById("urunForm").addEventListener("submit", async function(event) {
             event.preventDefault(); 
             const yeniUrun = {
                 barkod: document.getElementById("barkod").value,
+                firma_kodu: FIRMA_KODU,
                 marka: document.getElementById("marka").value,
                 isim: document.getElementById("isim").value,
                 stok_adedi: parseInt(document.getElementById("stok").value),
@@ -367,18 +376,33 @@
                 sube: document.getElementById("sube").value
             };
             const response = await fetch(`${API_URL}/urun-ekle/`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(yeniUrun)
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(yeniUrun)
             });
             if (response.ok) { document.getElementById("urunForm").reset(); urunleriGetir(); }
+            else { alert("Bu ürün firmanızda zaten kayıtlı!"); }
         });
 
-        async function zayiBildir(barkod, tamIsim) {
-            const sebep = prompt(`DİKKAT: ${tamIsim} çöpe atılacak.\nLütfen zayi sebebini girin:`);
+        async function stokGuncelle(barkod, mevcutStok) {
+            const yeniStok = prompt("Yeni stok miktarını girin:", mevcutStok);
+            if (yeniStok) {
+                await fetch(`${API_URL}/stok-guncelle/${FIRMA_KODU}/${barkod}?yeni_stok=${yeniStok}`, { method: "PUT" });
+                urunleriGetir(); 
+            }
+        }
+
+        async function zayiBildir(barkod) {
+            const sebep = prompt("Zayi sebebini girin:");
             if (sebep) {
-                const response = await fetch(`${API_URL}/urun-zayi-bildir/${barkod}?sebep=${sebep}`, { method: "DELETE" });
-                if (response.ok) { urunleriGetir(); zayiGecmisiGetir(); }
+                await fetch(`${API_URL}/urun-zayi-bildir/${FIRMA_KODU}/${barkod}?sebep=${sebep}`, { method: "DELETE" });
+                urunleriGetir(); zayiGecmisiGetir();
+            }
+        }
+
+        async function firsataAl(barkod) {
+            const yeniFiyat = prompt("İndirimli fiyatı girin:");
+            if (yeniFiyat) {
+                await fetch(`${API_URL}/firsat-reyonuna-al/${FIRMA_KODU}/${barkod}?yeni_fiyat=${yeniFiyat}`, { method: "POST" });
+                urunleriGetir(); firsatReyonunuGetir();
             }
         }
 
@@ -386,19 +410,17 @@
             const sorguTarihi = document.getElementById("sktSorguTarih").value;
             if (!sorguTarihi) return; 
             const secilen = new Date(sorguTarihi);
-            const riskliListesi = globalUrunler.filter(urun => {
-                const farkZaman = new Date(urun.skt).getTime() - secilen.getTime();
-                const farkGun = Math.ceil(farkZaman / (1000 * 3600 * 24));
+            ekranaCiz(globalUrunler.filter(urun => {
+                const farkGun = Math.ceil((new Date(urun.skt).getTime() - secilen.getTime()) / (1000 * 3600 * 24));
                 return farkGun >= 0 && farkGun <= 7;
-            });
-            ekranaCiz(riskliListesi);
+            }));
         }
 
-        window.onload = function() {
-            urunleriGetir();
-            zayiGecmisiGetir();
-            firsatReyonunuGetir();
-        };
+        function excelIndir(tabloID, dosyaAdi) {
+            let tablo = document.getElementById(tabloID);
+            let wb = XLSX.utils.table_to_book(tablo, {sheet: "Rapor"});
+            XLSX.writeFile(wb, FIRMA_KODU + "_" + dosyaAdi + ".xlsx");
+        }
     </script>
 </body>
 </html>
